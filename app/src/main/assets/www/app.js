@@ -205,6 +205,8 @@
   function showFail(e) {
     failQuota = A.isQuota(e);
     $('failMsg').textContent = A.friendlyError(e);
+    const dbg = (e && e.debug) || ('Chi tiết: ' + String((e && e.message) || e).slice(0, 300));
+    $('failDbg').textContent = '🔧 ' + dbg;
     $('failToken').classList.toggle('hide', !failQuota);
     $('failTokenIn').value = store.get(LS_TOKEN, '');
     $('fRetry').textContent = failQuota ? '💾 Lưu mã và thử lại' : '🔄 Thử lại';

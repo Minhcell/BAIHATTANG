@@ -90,15 +90,38 @@
     });
   }
 
-  function findAudio(data) {
-    for (const it of data || []) {
-      if (it && typeof it === 'object') {
-        const u = it.url || (it.value && it.value.url);
-        if (u && (/\.(mp3|wav|flac|ogg|m4a|opus)(\?|$)/i.test(u) || /audio/i.test(it.mime_type || ''))) return u;
-      }
+  const AUDIO_RE = /\.(mp3|wav|flac|ogg|m4a|opus|aac)(\?|$)/i;
+  let ROOT = '';
+  function toUrl(x) {
+    if (!x) return null;
+    if (/^(https?:|blob:|data:)/.test(x)) return x;
+    return ROOT.replace(/\/$/, '') + '/gradio_api/file=' + x;
+  }
+  // tìm file nhạc ở mọi dạng: {url}, {path}, {value:{...}}, chuỗi đường dẫn, mảng file
+  function findAudio(data, depth) {
+    depth = depth || 0;
+    if (data == null || depth > 5) return null;
+    if (typeof data === 'string') return AUDIO_RE.test(data) && data.length < 600 ? toUrl(data) : null;
+    if (Array.isArray(data)) { for (const it of data) { const u = findAudio(it, depth + 1); if (u) return u; } return null; }
+    if (typeof data === 'object') {
+      const u = data.url || null, pth = data.path || data.name || null;
+      if (u && (AUDIO_RE.test(u) || /audio/i.test(data.mime_type || '') || AUDIO_RE.test(pth || '') || AUDIO_RE.test(data.orig_name || ''))) return toUrl(u);
+      if (pth && typeof pth === 'string' && AUDIO_RE.test(pth)) return toUrl(pth);
+      for (const k of Object.keys(data)) { if (k === 'meta') continue; const r = findAudio(data[k], depth + 1); if (r) return r; }
     }
-    for (const it of data || []) if (it && typeof it === 'object' && (it.url || (it.value && it.value.url))) return it.url || it.value.url;
     return null;
+  }
+  function statusText(data) {
+    const out = [];
+    (data || []).forEach(it => { const s = typeof it === 'string' ? it : (it && typeof it.value === 'string' ? it.value : null); if (s && /error|lỗi|❌|fail|exceed|abort|timeout/i.test(s)) out.push(s.slice(0, 300)); });
+    return out.join(' | ');
+  }
+  function shape(v) {
+    if (v == null) return '∅';
+    if (typeof v === 'string') return 's' + v.length + (AUDIO_RE.test(v) ? '♪' : '');
+    if (Array.isArray(v)) return '[' + v.slice(0, 3).map(shape).join(',') + (v.length > 3 ? '…' + v.length : '') + ']';
+    if (typeof v === 'object') return '{' + Object.keys(v).slice(0, 6).join(',') + '}';
+    return typeof v;
   }
   function findLrc(data) {
     for (const it of data || []) {
@@ -134,7 +157,9 @@
     const job = c.submit(endpoint.name, args);
     if (signal) signal.addEventListener('abort', () => { try { job.cancel(); } catch (e) {} });
 
-    let last = null, t0 = Date.now();
+    let last = null, t0 = Date.now(), lastData = null, nData = 0, stats = [];
+    try { ROOT = (c.config && (c.config.root || c.config.root_url)) || ''; } catch (e) {}
+    if (!ROOT) ROOT = 'https://ace-step-ace-step-v1-5.hf.space';
     const tick = setInterval(() => {
       const s = Math.round((Date.now() - t0) / 1000);
       onStatus(null, Math.min(0.9, 0.15 + s / 150), s);
@@ -143,19 +168,30 @@
       for await (const ev of job) {
         if (signal && signal.aborted) throw new Error('Đã hủy');
         if (ev.type === 'status') {
+          stats.push((ev.stage || '?') + (ev.original_msg ? ':' + ev.original_msg : '') + (ev.success === false ? '!' : ''));
           if (ev.stage === 'error') { const er = new Error((ev.title ? ev.title + ': ' : '') + (ev.message || 'Phòng thu AI báo lỗi')); er.quota = /quota|ZeroGPU/i.test((ev.title || '') + (ev.message || '')); throw er; }
           if (ev.queue && ev.position != null && ev.position > 0) onStatus('Đang xếp hàng: còn ' + ev.position + ' bài trước bạn' + (ev.eta ? ' (~' + Math.round(ev.eta) + ' giây)' : ''), null);
           else if (ev.stage === 'pending' || ev.stage === 'generating') onStatus('AI đang thu âm giọng hát…', null);
           if (ev.stage === 'complete' && ev.success === false) throw new Error(ev.message || 'Tạo nhạc thất bại');
         } else if (ev.type === 'data') {
+          nData++; lastData = ev.data;
           if (findAudio(ev.data)) last = ev.data;
         }
       }
     } finally { clearInterval(tick); }
     const url = last && findAudio(last);
-    if (!url) throw new Error('Phòng thu AI không trả về file nhạc (có thể đang quá tải). Vui lòng thử lại.');
+    if (!url) {
+      const st = statusText(lastData);
+      const er = new Error(st ? 'Phòng thu AI báo: ' + st : 'Phòng thu AI không trả về file nhạc. Vui lòng thử lại.');
+      er.debug = 'Thời gian ' + Math.round((Date.now() - t0) / 1000) + 's · Trạng thái: ' + stats.slice(-6).join(' > ') + ' · Số gói dữ liệu: ' + nData +
+        (lastData ? ' · Dữ liệu cuối: ' + lastData.slice(0, 12).map(shape).join(' ') : '');
+      throw er;
+    }
     onStatus('Đang tải bài hát về máy…', 0.93);
-    const res = await fetch(url, o.token ? { headers: { Authorization: 'Bearer ' + o.token } } : undefined);
+    let res;
+    try { res = await fetch(url); } catch (e) { res = null; }
+    if ((!res || res.status === 401 || res.status === 403 || res.status === 404) && o.token) res = await fetch(url, { headers: { Authorization: 'Bearer ' + o.token } });
+    if (!res) throw new Error('Không tải được file nhạc từ phòng thu');
     if (!res.ok) throw new Error('Tải nhạc lỗi (' + res.status + ')');
     const bytes = new Uint8Array(await res.arrayBuffer());
     return { bytes, lrc: findLrc(last), voice, mime: /\.wav/i.test(url) ? 'audio/wav' : /\.flac/i.test(url) ? 'audio/flac' : 'audio/mpeg' };
