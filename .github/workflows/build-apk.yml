@@ -29,7 +29,21 @@ jobs:
           gradle-version: '8.9'
 
       - name: Build APK
-        run: gradle :app:assembleRelease --no-daemon --stacktrace
+        run: |
+          set -o pipefail
+          gradle :app:assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
+
+      - name: Gửi log lỗi về nhánh build-log
+        if: failure()
+        run: |
+          git config user.name "build-bot"; git config user.email "bot@users.noreply.github.com"
+          grep -n -E "error|Error|FAILED|What went wrong|e: |\.java:[0-9]+" build.log | head -300 > errors.txt || true
+          tail -150 build.log >> errors.txt
+          git checkout --orphan build-log
+          git rm -rf --cached . > /dev/null
+          git add -f errors.txt
+          git commit -m "log ${{ github.run_number }}"
+          git push -f origin build-log
 
       - name: Đổi tên APK
         run: |
