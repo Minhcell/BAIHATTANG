@@ -3,7 +3,7 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const L = window.Lyrics, M = window.Music, A = window.Ace;
-  const LS_FORM = 'bht_form2', LS_LIB = 'bht_lib2', LS_TOKEN = 'bht_hf';
+  const LS_FORM = 'bht_form2', LS_LIB = 'bht_lib2', LS_TOKEN = 'bht_hf', LS_SRV = 'bht_srv';
   const isApp = !!(window.Android && Android.fileBegin);
 
   const store = {
@@ -178,7 +178,7 @@
     const myCtl = abortCtl;
     let lastMsg = 'Đang kết nối phòng thu AI…';
     try {
-      const r = await A.generate({ sections, style: song.style, voice: song.voice, sex: song.sex, lang: song.lang, token: store.get(LS_TOKEN, '') },
+      const r = await A.generate({ sections, style: song.style, voice: song.voice, sex: song.sex, lang: song.lang, token: store.get(LS_TOKEN, ''), server: srvCfg().mode === 'colab' ? srvCfg().url : '' },
         (msg, p, secs) => {
           if (myCtl.signal.aborted) return;
           if (msg != null) lastMsg = msg;
@@ -381,9 +381,40 @@
 
   // ---------- Thanh trên ----------
   $('btnLib').onclick = () => { stop(); ui(); show('lib'); };
-  $('btnSet').onclick = () => { $('inToken').value = store.get(LS_TOKEN, ''); modal('mSet', true); };
+  const srvCfg = () => Object.assign({ mode: 'hf', url: '' }, store.get(LS_SRV, {}));
+  let setMode = 'hf';
+  function setModeUI(m) {
+    setMode = m;
+    $('srvChips').querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b.dataset.v === m));
+    $('setHF').classList.toggle('hide', m !== 'hf'); $('setColab').classList.toggle('hide', m !== 'colab');
+  }
+  $('srvChips').querySelectorAll('.chip').forEach(b => b.onclick = () => setModeUI(b.dataset.v));
+  function openSettings(mode) {
+    const c = srvCfg();
+    $('inToken').value = store.get(LS_TOKEN, ''); $('inServer').value = c.url || '';
+    setModeUI(mode || c.mode); modal('mSet', true);
+  }
+  $('btnSet').onclick = () => openSettings();
   $('setCancel').onclick = () => modal('mSet', false);
-  $('setOk').onclick = () => { const v = $('inToken').value.trim(); if (v && !/^hf_/.test(v)) { toast('Mã phải bắt đầu bằng hf_'); return; } store.set(LS_TOKEN, v); A.reset(); modal('mSet', false); toast(v ? 'Đã lưu mã Hugging Face' : 'Đã xóa mã'); };
+  const normUrl = v => { v = v.trim().replace(/\s+/g, ''); if (v && !/^https?:\/\//.test(v)) v = 'https://' + v; return v.replace(/\/+$/, ''); };
+  $('btnTest').onclick = async () => {
+    const u = normUrl($('inServer').value); if (!u) { toast('Dán link máy chủ trước'); return; }
+    $('srvState').textContent = '⏳ Đang kiểm tra…';
+    try {
+      const ctl = new AbortController(); setTimeout(() => ctl.abort(), 15000);
+      const r = await fetch(u + '/health', { signal: ctl.signal });
+      $('srvState').textContent = r.ok ? '✅ Kết nối được máy chủ Colab. Bấm Lưu rồi tạo bài hát.' : '❌ Máy chủ trả lỗi ' + r.status + '. Chạy lại Colab và dán link mới.';
+    } catch (e) { $('srvState').textContent = '❌ Không kết nối được. Kiểm tra trang Colab còn chạy và link đúng chưa.'; }
+  };
+  $('setOk').onclick = () => {
+    const v = $('inToken').value.trim();
+    if (v && !/^hf_/.test(v)) { toast('Mã phải bắt đầu bằng hf_'); return; }
+    const url = normUrl($('inServer').value);
+    if (setMode === 'colab' && !url) { toast('Dán link máy chủ Colab'); return; }
+    store.set(LS_TOKEN, v); store.set(LS_SRV, { mode: setMode, url }); A.reset();
+    modal('mSet', false); toast(setMode === 'colab' ? 'Đã chuyển sang máy chủ Colab' : 'Đã dùng Hugging Face');
+  };
+  $('fColab').onclick = () => { modal('mFail', false); show('wizard'); openSettings('colab'); };
   $('btnBack').onclick = () => window.handleBack();
 
   window.handleBack = function () {

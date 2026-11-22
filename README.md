@@ -12,6 +12,10 @@ App tự viết lời tiếng Việt từ câu trả lời, rồi gửi lên **A
 - Bài đã tạo được lưu trên máy (📚), nghe lại không cần mạng. Lưu MP3 / chia sẻ Zalo, Facebook.
 - Nếu phòng thu AI lỗi: có thể nghe bản giai điệu soạn offline (không có giọng hát).
 
+## Máy chủ Colab (miễn phí, nhiều bài hơn)
+Hugging Face miễn phí chỉ cho khoảng 3 lượt/ngày. Có thể tự chạy máy chủ AI miễn phí trên Google Colab:
+mở [colab/BaiHatTang_MayChu.ipynb](https://colab.research.google.com/github/Minhcell/BAIHATTANG/blob/main/colab/BaiHatTang_MayChu.ipynb) → Runtime → Change runtime type → T4 GPU → Run all → chép LINK MÁY CHỦ → app ⚙️ Cài đặt → Máy chủ Colab → dán → Lưu.
+
 ## Build
 Đẩy lên nhánh `main` → GitHub Actions tự build APK. Link tải bản mới nhất:
 `https://github.com/Minhcell/BAIHATTANG/releases/latest/download/BaiHatTang.apk`

@@ -212,10 +212,25 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 </div></div>
 
 <div class="modal" id="mSet"><div class="sheet">
-  <h3>Cài đặt</h3>
-  <div class="lbl">Mã Hugging Face (không bắt buộc)</div>
-  <input type="password" id="inToken" placeholder="hf_..." autocomplete="off">
-  <p class="note" style="text-align:left;margin-top:8px">Phòng thu AI chạy miễn phí trên Hugging Face, mỗi ngày có giới hạn lượt. Muốn thêm lượt: đăng ký tài khoản miễn phí tại huggingface.co → Settings → Access Tokens → tạo mã loại "Read" rồi dán vào đây.</p>
+  <h3>Cài đặt phòng thu AI</h3>
+  <div class="chips" id="srvChips" style="margin-bottom:12px"><button class="chip" data-v="hf">Hugging Face</button><button class="chip" data-v="colab">Máy chủ Colab</button></div>
+  <div id="setHF">
+    <div class="lbl">Mã Hugging Face</div>
+    <input type="password" id="inToken" placeholder="hf_..." autocomplete="off">
+    <p class="note" style="text-align:left;margin-top:8px">Miễn phí nhưng mỗi tài khoản chỉ khoảng 3 bài/ngày. Lấy mã: huggingface.co → Settings → Access Tokens → tạo mã loại "Read".</p>
+  </div>
+  <div id="setColab" class="hide">
+    <ol style="margin:0 0 10px;padding-left:20px;line-height:1.6;font-size:14px">
+      <li>Bấm nút dưới để mở trang Colab (đăng nhập Gmail).</li>
+      <li>Lần đầu: menu <b>Runtime → Change runtime type → T4 GPU</b> → Save.</li>
+      <li>Bấm <b>Runtime → Run all</b>, chờ 5–10 phút.</li>
+      <li>Chép <b>LINK MÁY CHỦ</b> (…trycloudflare.com) dán vào ô dưới.</li>
+    </ol>
+    <a href="https://colab.research.google.com/github/Minhcell/BAIHATTANG/blob/main/colab/BaiHatTang_MayChu.ipynb" target="_blank" class="btn sec" style="display:flex;text-decoration:none;margin-bottom:10px">🚀 Mở trang Colab</a>
+    <input type="text" id="inServer" placeholder="https://....trycloudflare.com" autocomplete="off">
+    <p class="note" id="srvState" style="text-align:left;margin-top:8px">Giữ trang Colab mở trong lúc dùng. Colab miễn phí tự tắt sau vài giờ; khi đó chạy lại và dán link mới.</p>
+    <button class="btn sec" id="btnTest" style="width:100%;margin-top:4px">🔌 Kiểm tra kết nối</button>
+  </div>
   <div class="btns"><button id="setCancel">Đóng</button><button class="p" id="setOk">Lưu</button></div>
 </div></div>
 
@@ -234,6 +249,7 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
   </div>
   <div class="btns" style="flex-direction:column">
     <button class="p" id="fRetry">🔄 Thử lại</button>
+    <button id="fColab">🚀 Dùng máy chủ Colab (miễn phí, nhiều bài hơn)</button>
     <button id="fOffline">🎹 Nghe bản giai điệu offline (không có giọng hát)</button>
     <button id="fClose">Đóng</button>
   </div>

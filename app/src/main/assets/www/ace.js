@@ -137,6 +137,7 @@
    * Trả về {bytes: Uint8Array (mp3), lrc, voice}
    */
   async function generate(o, onStatus, signal) {
+    if (o.server) return generateRest(o, onStatus, signal);
     const voice = pickVoice(o.voice, o.style, o.sex);
     const lang = o.lang || 'vi';
     const st = G.Music.STYLES[o.style] || G.Music.STYLES.ballad;
@@ -198,9 +199,64 @@
   }
 
   function isQuota(e) { const m = String((e && e.message) || e || ''); return !!(e && e.quota) || /quota|ZeroGPU|exceeded|token/i.test(m); }
+
+  // ===== Máy chủ Colab (API REST của ACE-Step) =====
+  async function generateRest(o, onStatus, signal) {
+    const base = o.server.replace(/\/+$/, '');
+    const voice = pickVoice(o.voice, o.style, o.sex);
+    const lang = o.lang || 'vi';
+    const st = G.Music.STYLES[o.style] || G.Music.STYLES.ballad;
+    const caption = (CAPTION[o.style] || CAPTION.ballad) + ', ' + VOICE_TXT[voice] + (lang === 'vi' ? ', Vietnamese lyrics, clear Vietnamese pronunciation' : '');
+    const body = {
+      prompt: caption, lyrics: lyricsFor(o.sections), vocal_language: lang, audio_duration: durationFor(o.sections),
+      bpm: st.bpm, batch_size: 1, audio_format: 'mp3', thinking: true, use_random_seed: true, inference_steps: 8
+    };
+    const j = async (path, data) => {
+      const r = await fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), signal });
+      if (!r.ok) throw new Error('Máy chủ Colab lỗi ' + r.status + (r.status === 530 || r.status === 502 ? ' (máy chủ đã tắt, hãy chạy lại Colab và dán link mới)' : ''));
+      const x = await r.json();
+      if (x.code && x.code !== 200) throw new Error(x.error || ('Lỗi ' + x.code));
+      return x.data;
+    };
+    onStatus('Đang kết nối máy chủ Colab…', 0.05);
+    const t0 = Date.now();
+    const rel = await j('/release_task', body);
+    const id = rel && (rel.task_id || rel.job_id);
+    if (!id) throw new Error('Máy chủ không nhận yêu cầu');
+    onStatus(rel.queue_position > 1 ? 'Đang xếp hàng: vị trí ' + rel.queue_position : 'AI đang thu âm giọng hát…', 0.12);
+    let file = null, lrc = '';
+    for (;;) {
+      if (signal && signal.aborted) throw new Error('Đã hủy');
+      await new Promise(r => setTimeout(r, 3000));
+      const q = await j('/query_result', { task_id_list: [id] });
+      const it = Array.isArray(q) ? q[0] : q;
+      if (!it) continue;
+      let res = it.result;
+      if (typeof res === 'string') { try { res = JSON.parse(res); } catch (e) { res = []; } }
+      const first = Array.isArray(res) ? res[0] : res;
+      const secs = Math.round((Date.now() - t0) / 1000);
+      if (it.status === 2) throw new Error('Máy chủ Colab báo lỗi: ' + ((first && first.error) || it.progress_text || 'không rõ'));
+      if (it.status === 1) {
+        file = first && (first.file || (first.audio_paths && first.audio_paths[0]));
+        lrc = (first && (first.lrc || first.lyrics_timestamps)) || '';
+        break;
+      }
+      const pr = first && first.progress != null ? +first.progress : null;
+      onStatus('AI đang thu âm giọng hát… ' + secs + ' giây', pr != null && pr > 0 ? Math.min(0.92, 0.12 + pr * 0.8) : Math.min(0.9, 0.12 + secs / 200));
+      if (secs > 900) throw new Error('Quá lâu không có kết quả, vui lòng thử lại');
+    }
+    if (!file) throw new Error('Máy chủ Colab không trả về file nhạc');
+    const url = /^https?:/.test(file) ? file : base + (file.charAt(0) === '/' ? '' : '/') + file;
+    onStatus('Đang tải bài hát về máy…', 0.94);
+    const r = await fetch(url, { signal });
+    if (!r.ok) throw new Error('Tải nhạc lỗi (' + r.status + ')');
+    return { bytes: new Uint8Array(await r.arrayBuffer()), lrc: typeof lrc === 'string' ? lrc : '', voice, mime: /\.wav/i.test(file) ? 'audio/wav' : 'audio/mpeg' };
+  }
+
   function friendlyError(e) {
     const m = String((e && e.message) || e || '');
     if (e && e.quota || /quota|ZeroGPU|exceeded/i.test(m)) return 'Hết lượt AI miễn phí. Hugging Face yêu cầu mã (token) của tài khoản miễn phí để được dùng tiếp. Làm theo hướng dẫn bên dưới rồi bấm "Lưu mã và thử lại".';
+    if (/Colab/i.test(m)) return m;
     if (/fetch|network|Failed to|connect|NetworkError|load/i.test(m)) return 'Không kết nối được phòng thu AI. Kiểm tra mạng Internet rồi thử lại.';
     if (/sleep|paused|building|starting/i.test(m)) return 'Phòng thu AI đang khởi động, vui lòng thử lại sau 1–2 phút.';
     return m || 'Lỗi không rõ';
