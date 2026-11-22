@@ -20,17 +20,19 @@ const short=v=>{try{const s=JSON.stringify(v);return s&&s.length>300?s.slice(0,3
   const lyrics=Ace.lyricsFor(secs);
   const vals={caption:'Vietnamese ballad, emotional, soft piano, male vocal',lyrics,lang:'vi',duration:40,bpm:72};
   // reuse ace.js mapping by calling generate with logging
-  const job=c.submit('/generation_wrapper', (function(){
-    return ep.parameters.map(p=>{const l=(p.label||'').trim();const def=p.parameter_has_default?p.parameter_default:null;
-      if(/caption|^prompt$/i.test(l))return vals.caption; if(/^lyrics$/i.test(l))return vals.lyrics;
-      if(/^vocal language$/i.test(l))return Array.isArray(def)?['vi']:'vi'; if(/audio duration/i.test(l))return 40;
+  const args=ep.parameters.map(p=>{const l=(p.label||'').trim();const def=p.parameter_has_default?p.parameter_default:null;
+      if(/^song description$/i.test(l))return vals.caption; if(/^prompt$/i.test(l))return vals.caption; if(/^lyrics$/i.test(l))return vals.lyrics;
+      if(/^vocal language/i.test(l))return 'vi'; if(/audio duration/i.test(l))return 40;
       if(/^batch size$/i.test(l))return 1; if(/^random seed$/i.test(l))return true; if(/^audio format$/i.test(l))return 'mp3';
-      if(/^auto lrc$/i.test(l))return true; if(/^auto score$/i.test(l))return false; if(/^autogen$/i.test(l))return false; return def;});
-  })());
+      if(/^get lrc$/i.test(l))return true; return def;});
+  log('ARGS',short(args.slice(0,17)));
+  const job=c.submit('/generation_wrapper', args, undefined, undefined, true);
   for await (const ev of job){
     if(ev.type==='data'){ log('DATA n='+ev.data.length); ev.data.forEach((d,i)=>{ if(d!==null&&d!==''&&!(Array.isArray(d)&&!d.length)) log('  D'+i,short(d)); }); }
     else log('EV',ev.type,ev.stage||'',short(Object.assign({},ev,{data:undefined})));
   }
+  log('ITER-END');
+  try{ const r=await c.predict('/generation_wrapper', args); log('PREDICT', short(r.data&&r.data.slice(0,12))); }catch(e){ log('PREDICT-ERR', short(e), String(e&&e.message)); }
   log('END',(Date.now()-t0)+'ms');
  }catch(e){log('ERROR',String(e&&e.message||e),short(e))}
 })();
