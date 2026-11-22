@@ -222,6 +222,15 @@ textarea{min-height:120px;resize:vertical;line-height:1.5}
 <div class="modal" id="mFail"><div class="sheet">
   <h3>Chưa tạo được bài hát</h3>
   <p id="failMsg" style="line-height:1.5"></p>
+  <div id="failToken" class="hide">
+    <ol style="margin:0 0 10px;padding-left:20px;line-height:1.6;font-size:14px">
+      <li>Bấm nút dưới để mở Hugging Face, đăng ký tài khoản <b>miễn phí</b> (hoặc đăng nhập).</li>
+      <li>Vào trang <b>Access Tokens</b> → <b>Create new token</b> → chọn loại <b>Read</b> → Create.</li>
+      <li>Chép mã bắt đầu bằng <b>hf_</b> rồi dán vào ô dưới.</li>
+    </ol>
+    <a href="https://huggingface.co/settings/tokens" target="_blank" class="btn sec" style="display:flex;text-decoration:none;margin-bottom:10px">🔑 Mở trang lấy mã Hugging Face</a>
+    <input type="password" id="failTokenIn" placeholder="Dán mã hf_... vào đây" autocomplete="off">
+  </div>
   <div class="btns" style="flex-direction:column">
     <button class="p" id="fRetry">🔄 Thử lại</button>
     <button id="fOffline">🎹 Nghe bản giai điệu offline (không có giọng hát)</button>

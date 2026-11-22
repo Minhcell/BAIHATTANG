@@ -1,0 +1,14 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>ACE app test</title></head><body>
+<pre id="log" style="white-space:pre-wrap;font:12px monospace"></pre>
+<script src="gradio.js"></script><script src="lyrics.js"></script><script src="music.js"></script><script src="ace.js"></script>
+<script>
+const log=(...a)=>{document.getElementById('log').textContent+=a.join(' ')+'\n'};
+(async()=>{
+  const s=Lyrics.compose({occasion:'sinhnhat',relation:'bangai',sender:'nam',name:'Hồng',story:'Lần đầu gặp nhau dưới mưa ở Đà Lạt',seed:3});
+  try{
+    const r=await Ace.generate({sections:s.sections.slice(0,2),style:'ballad',voice:'auto',sex:'nam',lang:'vi',token:''},(m,p,sec)=>{ if(m) log('STATUS',m,p==null?'':p); });
+    log('OK bytes',r.bytes.length,'lrc',r.lrc.slice(0,200));
+  }catch(e){ log('FAIL quota=',Ace.isQuota(e),'|',Ace.friendlyError(e),'| raw:',e.message); }
+  log('END');
+})();
+</script></body></html>

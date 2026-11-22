@@ -197,12 +197,27 @@
     } catch (e) {
       if (myCtl.signal.aborted) return;
       console.error(e);
-      $('failMsg').textContent = A.friendlyError(e);
-      modal('mFail', true);
+      showFail(e);
     }
   }
   $('btnCancel').onclick = () => { if (abortCtl) abortCtl.abort(); show('wizard'); };
-  $('fRetry').onclick = () => { modal('mFail', false); sing(); };
+  let failQuota = false;
+  function showFail(e) {
+    failQuota = A.isQuota(e);
+    $('failMsg').textContent = A.friendlyError(e);
+    $('failToken').classList.toggle('hide', !failQuota);
+    $('failTokenIn').value = store.get(LS_TOKEN, '');
+    $('fRetry').textContent = failQuota ? '💾 Lưu mã và thử lại' : '🔄 Thử lại';
+    modal('mFail', true);
+  }
+  $('fRetry').onclick = () => {
+    if (failQuota) {
+      const v = $('failTokenIn').value.trim();
+      if (!/^hf_[A-Za-z0-9]{10,}$/.test(v)) { toast('Mã chưa đúng, mã phải bắt đầu bằng hf_'); return; }
+      store.set(LS_TOKEN, v); A.reset();
+    }
+    modal('mFail', false); sing();
+  };
   $('fClose').onclick = () => { modal('mFail', false); show('wizard'); };
   $('fOffline').onclick = async () => { modal('mFail', false); await offlineVersion(); };
 
@@ -366,7 +381,7 @@
   $('btnLib').onclick = () => { stop(); ui(); show('lib'); };
   $('btnSet').onclick = () => { $('inToken').value = store.get(LS_TOKEN, ''); modal('mSet', true); };
   $('setCancel').onclick = () => modal('mSet', false);
-  $('setOk').onclick = () => { const v = $('inToken').value.trim(); if (v && !/^hf_/.test(v)) { toast('Mã phải bắt đầu bằng hf_'); return; } store.set(LS_TOKEN, v); modal('mSet', false); toast(v ? 'Đã lưu mã Hugging Face' : 'Đã xóa mã'); };
+  $('setOk').onclick = () => { const v = $('inToken').value.trim(); if (v && !/^hf_/.test(v)) { toast('Mã phải bắt đầu bằng hf_'); return; } store.set(LS_TOKEN, v); A.reset(); modal('mSet', false); toast(v ? 'Đã lưu mã Hugging Face' : 'Đã xóa mã'); };
   $('btnBack').onclick = () => window.handleBack();
 
   window.handleBack = function () {

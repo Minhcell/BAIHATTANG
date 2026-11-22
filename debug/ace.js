@@ -49,7 +49,7 @@
   async function connect(token, onStatus) {
     if (client && clientToken === (token || '')) return client;
     onStatus && onStatus('Đang kết nối phòng thu AI…');
-    const opts = {};
+    const opts = { events: ['data', 'status'] };
     if (token) opts.token = opts.hf_token = token;
     client = await G.GradioClient.Client.connect(SPACE, opts);
     clientToken = token || '';
@@ -73,17 +73,19 @@
     return params.map(p => {
       const l = (p.label || '').trim();
       const def = p.parameter_has_default ? p.parameter_default : null;
-      if (/caption|^prompt$/i.test(l)) return v.caption;
+      if (/^song description$|caption|^prompt$/i.test(l)) return v.caption;
       if (/^lyrics$/i.test(l)) return v.lyrics;
-      if (/^vocal language$/i.test(l)) return Array.isArray(def) ? [v.lang] : v.lang;
+      if (/^vocal language/i.test(l)) return Array.isArray(def) ? [v.lang] : v.lang;
       if (/audio duration/i.test(l)) return v.duration;
       if (/^batch size$/i.test(l)) return 1;
       if (/^random seed$/i.test(l)) return true;
       if (/^audio format$/i.test(l)) return 'mp3';
-      if (/^auto lrc$/i.test(l)) return true;
-      if (/^auto score$/i.test(l)) return false;
+      if (/^(auto|get) lrc$/i.test(l)) return true;
+      if (/^(auto|get) scores?$/i.test(l)) return false;
       if (/^autogen$/i.test(l)) return false;
+      if (p.component === 'Radio' && def === 'custom') return 'custom';
       if (/^bpm/i.test(l)) return v.bpm || def;
+      if (/^models?$/i.test(l)) return def;
       return def;
     });
   }
@@ -141,7 +143,7 @@
       for await (const ev of job) {
         if (signal && signal.aborted) throw new Error('Đã hủy');
         if (ev.type === 'status') {
-          if (ev.stage === 'error') throw new Error(ev.message || 'Phòng thu AI báo lỗi');
+          if (ev.stage === 'error') { const er = new Error((ev.title ? ev.title + ': ' : '') + (ev.message || 'Phòng thu AI báo lỗi')); er.quota = /quota|ZeroGPU/i.test((ev.title || '') + (ev.message || '')); throw er; }
           if (ev.queue && ev.position != null && ev.position > 0) onStatus('Đang xếp hàng: còn ' + ev.position + ' bài trước bạn' + (ev.eta ? ' (~' + Math.round(ev.eta) + ' giây)' : ''), null);
           else if (ev.stage === 'pending' || ev.stage === 'generating') onStatus('AI đang thu âm giọng hát…', null);
           if (ev.stage === 'complete' && ev.success === false) throw new Error(ev.message || 'Tạo nhạc thất bại');
@@ -151,7 +153,7 @@
       }
     } finally { clearInterval(tick); }
     const url = last && findAudio(last);
-    if (!url) throw new Error('Không nhận được file nhạc từ AI');
+    if (!url) throw new Error('Phòng thu AI không trả về file nhạc (có thể đang quá tải). Vui lòng thử lại.');
     onStatus('Đang tải bài hát về máy…', 0.93);
     const res = await fetch(url, o.token ? { headers: { Authorization: 'Bearer ' + o.token } } : undefined);
     if (!res.ok) throw new Error('Tải nhạc lỗi (' + res.status + ')');
@@ -159,9 +161,10 @@
     return { bytes, lrc: findLrc(last), voice, mime: /\.wav/i.test(url) ? 'audio/wav' : /\.flac/i.test(url) ? 'audio/flac' : 'audio/mpeg' };
   }
 
+  function isQuota(e) { const m = String((e && e.message) || e || ''); return !!(e && e.quota) || /quota|ZeroGPU|exceeded|token/i.test(m); }
   function friendlyError(e) {
     const m = String((e && e.message) || e || '');
-    if (/quota|GPU|ZeroGPU|exceeded/i.test(m)) return 'Hết lượt AI miễn phí hôm nay. Nhập mã Hugging Face (miễn phí) trong Cài đặt để có thêm lượt, hoặc thử lại sau.';
+    if (e && e.quota || /quota|ZeroGPU|exceeded/i.test(m)) return 'Hết lượt AI miễn phí. Hugging Face yêu cầu mã (token) của tài khoản miễn phí để được dùng tiếp. Làm theo hướng dẫn bên dưới rồi bấm "Lưu mã và thử lại".';
     if (/fetch|network|Failed to|connect|NetworkError|load/i.test(m)) return 'Không kết nối được phòng thu AI. Kiểm tra mạng Internet rồi thử lại.';
     if (/sleep|paused|building|starting/i.test(m)) return 'Phòng thu AI đang khởi động, vui lòng thử lại sau 1–2 phút.';
     return m || 'Lỗi không rõ';
@@ -179,5 +182,5 @@
     return out.sort((a, b) => a.t - b.t);
   }
 
-  G.Ace = { generate, pickVoice, lyricsFor, friendlyError, parseLrc };
+  G.Ace = { generate, pickVoice, lyricsFor, friendlyError, isQuota, parseLrc, reset: () => { client = null; endpoint = null; } };
 })(window);
