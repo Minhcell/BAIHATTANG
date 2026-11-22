@@ -1,0 +1,55 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Dùng Android SDK có sẵn trên máy build
+        run: |
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build APK
+        run: gradle :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Đổi tên APK
+        run: |
+          mkdir -p out
+          cp app/build/outputs/apk/release/*.apk out/BaiHatTang.apk
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BaiHatTang-apk
+          path: out/BaiHatTang.apk
+
+      - name: Phát hành (link tải cố định)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Bài Hát Tặng v1.0.${{ github.run_number }}
+          body: |
+            Bản build tự động từ commit ${{ github.sha }}.
+            Link tải bản mới nhất luôn là:
+            https://github.com/${{ github.repository }}/releases/latest/download/BaiHatTang.apk
+          files: out/BaiHatTang.apk
+          make_latest: true
